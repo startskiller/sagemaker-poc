@@ -1,0 +1,54 @@
+import numpy as np
+
+class VolCalculator:
+
+    """
+    This is custom volatility calculator implemented by Pratik Gujarathi
+    """
+
+
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def computeVolatilityScalingFactor(maDays=2):
+        return 2 ** (-1.0 / maDays)
+
+
+    @staticmethod
+    def calculateDailyVolatility(df, price_column = 'close_price',
+                                scalingFactor=None,
+                                historicalVolLookbackPeriod=20,
+                                how='geometric'):
+        if scalingFactor is None:
+            print("Using default scaling factor for vol calculation")
+            scalingFactor = \
+                VolCalculator.computeVolatilityScalingFactor()
+        if how == 'geometric':
+            df['log'] = np.log(df[price_column]/df[price_column].shift())
+            df['std_dev'] = np.nan
+            volatilityColumnName = 'volatility'
+            df[volatilityColumnName] = np.nan
+            volColumnIndex = df.columns.get_loc(volatilityColumnName)
+            stdDevIndx = df.columns.get_loc('std_dev')
+            df.iloc[historicalVolLookbackPeriod-1, stdDevIndx] = \
+                np.nanstd(list(df['log'])[1:historicalVolLookbackPeriod],
+                          ddof=1)
+            df.iloc[historicalVolLookbackPeriod-1, volColumnIndex] =\
+                df.iloc[historicalVolLookbackPeriod-1, stdDevIndx]
+
+            counter = 1
+            for row in df.iloc[historicalVolLookbackPeriod:,:].iterrows():
+                std_start = 1 + counter
+                std_end = historicalVolLookbackPeriod + counter
+                position = historicalVolLookbackPeriod-1 + counter
+                df.iloc[position, stdDevIndx] = np.nanstd(
+                        list(df['log'])[std_start:std_end],
+                        ddof=1)
+                df.iloc[position, volColumnIndex] = (1-scalingFactor)*df.iloc[
+                    position, stdDevIndx]+scalingFactor*df.iloc[
+                                                   position-1, volColumnIndex]
+                counter = counter + 1
+        else:
+            raise Exception("Currently Only Geometric method supported")
+        return df
